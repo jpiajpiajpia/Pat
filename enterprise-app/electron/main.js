@@ -202,6 +202,12 @@ function createWindow() {
   });
 }
 
+// IPC: open a path in the user's default app (Preview for PDF, Keynote for PPTX, etc.)
+ipcMain.handle("nexus:open-path", async (_e, absPath) => {
+  if (typeof absPath !== "string" || !absPath) return "Invalid path";
+  return shell.openPath(absPath);
+});
+
 // IPC: native folder picker for the Code workspace
 ipcMain.handle("nexus:pick-folder", async () => {
   if (!mainWindow) return null;

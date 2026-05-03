@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import {
   ChevronDown, ChevronRight, Wrench, Download, FileText, FileSpreadsheet,
   Presentation, Image as ImageIcon, FileJson, Calendar, Code as CodeIcon,
-  Brain, Paperclip,
+  Brain, Paperclip, Eye,
 } from "lucide-react";
+import { usePreview } from "@/store/preview";
 import { cn } from "@/lib/utils";
 import type { Message, ToolInvocation } from "ai";
 import { ActivityFeed } from "./ActivityFeed";
@@ -80,12 +81,19 @@ function formatBytes(n: number): string {
 
 function GeneratedFileChip({ file }: { file: GeneratedFile }) {
   const Icon = fileIconForMime(file.mimeType);
+  const { openPreview } = usePreview();
+
   return (
-    <a
-      href={file.downloadUrl}
-      download={file.filename}
-      className="group flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors max-w-md"
+    <div
+      className="group flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors max-w-md cursor-pointer"
       style={{ background: "var(--pat-cream-10)", borderColor: "rgba(200,169,110,0.3)" }}
+      onClick={() => openPreview({
+        source: "generated",
+        id: file.id,
+        filename: file.filename,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+      })}
     >
       <div
         className="h-8 w-8 rounded-md flex items-center justify-center flex-shrink-0"
@@ -97,23 +105,58 @@ function GeneratedFileChip({ file }: { file: GeneratedFile }) {
         <div className="text-sm font-medium truncate" style={{ color: "var(--pat-text)" }}>{file.filename}</div>
         <div className="text-xs" style={{ color: "var(--pat-muted)" }}>{formatBytes(file.sizeBytes)}</div>
       </div>
-      <Download className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100 flex-shrink-0" style={{ color: "var(--pat-cream)" }} />
-    </a>
+      <button
+        title="Preview"
+        className="p-1 rounded opacity-60 group-hover:opacity-100 hover:bg-white/8 flex-shrink-0"
+        style={{ color: "var(--pat-cream)" }}
+        onClick={(e) => {
+          e.stopPropagation();
+          openPreview({
+            source: "generated",
+            id: file.id,
+            filename: file.filename,
+            mimeType: file.mimeType,
+            sizeBytes: file.sizeBytes,
+          });
+        }}
+      >
+        <Eye className="h-3.5 w-3.5" />
+      </button>
+      <a
+        href={file.downloadUrl}
+        download={file.filename}
+        title="Download"
+        onClick={(e) => e.stopPropagation()}
+        className="p-1 rounded opacity-60 group-hover:opacity-100 hover:bg-white/8 flex-shrink-0"
+        style={{ color: "var(--pat-cream)" }}
+      >
+        <Download className="h-3.5 w-3.5" />
+      </a>
+    </div>
   );
 }
 
 function AttachmentChip({ file }: { file: AttachedFile }) {
   const Icon = fileIconForMime(file.mimeType);
+  const { openPreview } = usePreview();
   return (
-    <span
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs"
+    <button
+      onClick={() => openPreview({
+        source: "upload",
+        id: file.id,
+        filename: file.filename,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+      })}
+      title="Click to preview"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs hover:bg-white/8 transition-colors"
       style={{ background: "var(--pat-cream-10)", borderColor: "rgba(200,169,110,0.25)", color: "var(--pat-cream)" }}
     >
       <Paperclip className="h-3 w-3" />
       <Icon className="h-3 w-3 opacity-70" />
       <span className="font-medium" style={{ color: "var(--pat-text)" }}>{file.filename}</span>
       {file.sizeBytes !== undefined && <span style={{ color: "var(--pat-muted)" }}>· {formatBytes(file.sizeBytes)}</span>}
-    </span>
+    </button>
   );
 }
 

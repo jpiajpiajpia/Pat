@@ -9,4 +9,10 @@ contextBridge.exposeInMainWorld("nexus", {
    * the user cancelled.
    */
   pickFolder: () => ipcRenderer.invoke("nexus:pick-folder"),
+  /**
+   * Open a file or folder in the user's default app via macOS LaunchServices
+   * (Preview for PDFs, Keynote for .pptx, TextEdit for plain text, etc.).
+   * Returns "" on success or an error string.
+   */
+  openPath: (absPath) => ipcRenderer.invoke("nexus:open-path", absPath),
 });

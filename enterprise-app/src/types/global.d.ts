@@ -9,6 +9,8 @@ declare global {
     nexus?: {
       /** Open a native folder picker. Returns the absolute path or null if cancelled. */
       pickFolder: () => Promise<string | null>;
+      /** Open a file/folder in the default app. Returns "" on success or an error string. */
+      openPath: (absPath: string) => Promise<string>;
     };
   }
 }

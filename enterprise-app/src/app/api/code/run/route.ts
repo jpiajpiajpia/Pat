@@ -29,12 +29,43 @@ function safePath(workspace: string, rel: string): string | null {
 
 const CODE_SYSTEM = `You are Pat's code agent — an expert software engineer that works directly on the user's local files.
 
-You have a workspace folder mapped on disk and a rich tool set: read/write/edit/glob files, search code with line numbers, run shell commands, inspect git, and generate documents.
+You have a workspace folder mapped on disk and a rich tool set: read/write/edit/glob files, search code with line numbers, run shell commands, inspect git, and use web/utility tools.
 
-How to work:
+## File creation — IMPORTANT
+
+To create ANY file (HTML, CSS, JS, TS, Python, Markdown, JSON, YAML, plain text, etc.) in the workspace, ALWAYS use \`write_file\`. Examples:
+- New HTML page → write_file({path: "news.html", content: "<!DOCTYPE html>..."})
+- New script → write_file({path: "src/index.js", content: "..."})
+- New config → write_file({path: ".eslintrc.json", content: "{...}"})
+
+Do NOT call create_pdf, create_html, create_docx, create_text, create_markdown, etc. — those are chat-mode tools that don't exist here. write_file handles ALL file creation in the workspace.
+
+### CRITICAL: prose vs tool calls
+
+The text you write to the user (prose, code blocks like \`\`\`html ... \`\`\`) is ONLY shown to the user — it is NEVER written to a file. Only the \`content\` argument you pass to \`write_file\` ends up on disk.
+
+**WRONG** (this writes "..." to the file, not the HTML):
+\`\`\`
+Here's the HTML for index.html:
+\`\`\`html
+<!DOCTYPE html>...full HTML...
+\`\`\`
+<tool_call>{"name": "write_file", "arguments": {"path": "index.html", "content": "..."}}</tool_call>
+\`\`\`
+
+**RIGHT** (the full HTML is in the content field, where it actually gets written):
+\`\`\`
+I'll create index.html now.
+<tool_call>{"name": "write_file", "arguments": {"path": "index.html", "content": "<!DOCTYPE html>\\n<html>...full HTML escaped...</html>"}}</tool_call>
+\`\`\`
+
+NEVER pass "...", "TODO", "see above", or any placeholder as content. The system has no way to "fill in" content from your prose. If your file is large, just put the whole thing in the content field — that's what it's for.
+
+## How to work
+
 1. Understand the task. If unclear, ask one focused question first.
 2. Explore before acting — list_directory, code_search, file_exists.
-3. Make targeted, minimal edits. Use edit_file (find/replace) before write_file (full overwrite).
+3. Make targeted, minimal edits. Use edit_file (find/replace) before write_file (full overwrite) when modifying existing files.
 4. After changes, verify by reading the file back.
 5. When you're done, summarize what changed in 1–3 sentences.
 
@@ -109,18 +140,46 @@ export async function POST(req: Request) {
 
   declare(
     "write_file",
-    "Write or create a file. Creates parent directories automatically.",
+    "Create or overwrite ANY file in the workspace — HTML, CSS, JS, TS, Python, Markdown, JSON, plain text, configs, etc. Creates parent directories automatically. Use this for ALL file creation in code mode. The `content` field MUST contain the COMPLETE final file contents as a string — never a placeholder like '...' or 'TODO'. Do not put the file content in your prose response and pass a placeholder here; the prose is shown to the user but is NEVER written to the file. Example: write_file({path: 'news.html', content: '<!DOCTYPE html>\\n<html>...complete document...</html>'}).",
     z.object({
-      path: z.string().describe("Path relative to workspace root"),
-      content: z.string().describe("Full file content to write"),
+      path: z.string().describe("Path relative to workspace root, e.g. 'src/index.ts' or 'news.html'"),
+      content: z.string().describe("COMPLETE file content. Not a summary, not a placeholder — the actual bytes that will be written to disk."),
     }),
     async ({ path: relPath, content }) => {
       const abs = safePath(ws, relPath as string);
       if (!abs) return { ok: false, error: "Path traversal denied" };
+
+      // Detect placeholder content. The model often writes the real file in
+      // prose then passes "..." or "TODO" here, expecting the system to fill
+      // it in. Reject so the model retries with the actual content.
+      const c = (content as string) ?? "";
+      const trimmed = c.trim();
+      const placeholderPatterns = [
+        /^\.{1,5}$/,                                // "...", "..", "."
+        /^todo$/i,
+        /^placeholder$/i,
+        /^see (above|previous|prose)/i,
+        /^as (shown|described|written) (above|previously)/i,
+        /^\[?(insert|fill|put|paste).*\]?$/i,
+      ];
+      if (placeholderPatterns.some((p) => p.test(trimmed))) {
+        return {
+          ok: false,
+          error: `write_file rejected: the 'content' field appears to be a placeholder ("${trimmed.slice(0, 40)}"). The content parameter must contain the FULL final file as a string — your prose response is NEVER written to the file. Retry write_file with the complete actual content.`,
+        };
+      }
+      // Also reject suspiciously short content for files the model promised would be substantial
+      if (trimmed.length < 10 && trimmed.length > 0) {
+        return {
+          ok: false,
+          error: `write_file rejected: 'content' is only ${trimmed.length} characters, which looks like a placeholder. If you genuinely want a tiny file, that's fine — but if you intended substantive content, retry with the complete file body.`,
+        };
+      }
+
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, content as string, "utf-8");
       await saveStep("tool_result", `Wrote ${relPath} (${(content as string).length} chars)`, "write_file");
-      return { ok: true, path: relPath };
+      return { ok: true, path: relPath, bytes: (content as string).length };
     },
   );
 
@@ -295,6 +354,12 @@ export async function POST(req: Request) {
     : null;
 
   for (const t of TOOL_CATALOG) {
+    // In code mode the workspace IS the deliverable — skip the chat-mode
+    // file-generation tools (create_pdf, create_html, create_text, etc.). They
+    // write to a hidden cache, not the workspace, which confuses the agent and
+    // makes "the file was created" reports point to nowhere the user can see.
+    // write_file covers all file creation here.
+    if (t.category === "files") continue;
     if (enabledToolIds && !enabledToolIds.has(t.id)) continue;
     tools[t.id] = {
       name: t.id,

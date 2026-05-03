@@ -6,9 +6,11 @@ import { AgentFeed } from "./AgentFeed";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { ModelSelector } from "@/components/chat/ModelSelector";
 import { useAppStore } from "@/store/app";
+import { usePreview } from "@/store/preview";
+import { lookup as mimeLookup } from "mime-types";
 import {
   Code2, FolderOpen, Send, Square, X,
-  ChevronRight, Loader2, FileText,
+  ChevronRight, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import useSWR from "swr";
@@ -28,8 +30,8 @@ export function CodeWindow({ sessionId }: Props) {
     selectedCodeModel ?? user?.settings?.defaultCodeModel ?? "qwen2.5-coder:7b";
 
   const [task, setTask] = useState("");
-  const [fileContent, setFileContent] = useState<{ path: string; content: string } | null>(null);
   const [workspaceDraft, setWorkspaceDraft] = useState("");
+  const { openPreview } = usePreview();
   const [showWorkspacePicker, setShowWorkspacePicker] = useState(false);
   const [hasNativePicker, setHasNativePicker] = useState(false);
 
@@ -103,12 +105,17 @@ export function CodeWindow({ sessionId }: Props) {
     setShowWorkspacePicker(true);
   }
 
-  const handleFileClick = useCallback(async (relPath: string) => {
+  const handleFileClick = useCallback((relPath: string) => {
     if (!workspace) return;
-    const res = await fetch(`/api/code/file?workspace=${encodeURIComponent(workspace)}&path=${encodeURIComponent(relPath)}&op=read`);
-    const data = await res.json() as { content?: string; error?: string };
-    if (data.content !== undefined) setFileContent({ path: relPath, content: data.content });
-  }, [workspace]);
+    const filename = relPath.split("/").pop() ?? relPath;
+    openPreview({
+      source: "workspace",
+      workspace,
+      path: relPath,
+      filename,
+      mimeType: (mimeLookup(filename) as string) || "application/octet-stream",
+    });
+  }, [workspace, openPreview]);
 
   const savedSteps = session?.steps ?? [];
   const hasActivity = savedSteps.length > 0 || messages.length > 1;
@@ -246,21 +253,8 @@ export function CodeWindow({ sessionId }: Props) {
         </div>
       </div>
 
-      {/* Right: file viewer (shown when a file is clicked) */}
-      {fileContent && (
-        <div className="w-96 flex-shrink-0 border-l border-white/10 bg-zinc-950 flex flex-col">
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/10">
-            <FileText className="h-3.5 w-3.5 text-zinc-500" />
-            <span className="text-xs text-zinc-400 flex-1 truncate font-mono">{fileContent.path}</span>
-            <button onClick={() => setFileContent(null)} className="text-zinc-600 hover:text-zinc-300">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <pre className="flex-1 overflow-auto p-4 text-xs text-zinc-300 font-mono leading-5 whitespace-pre-wrap break-all">
-            {fileContent.content}
-          </pre>
-        </div>
-      )}
+      {/* The right-side file preview is now handled by the shared PreviewDrawer
+          mounted in AppShell — clicking a file in WorkspacePanel calls openPreview(). */}
     </div>
   );
 }

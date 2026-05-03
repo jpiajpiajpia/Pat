@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     "tesseract.js",
     "pdf-parse",
     "pdfjs-dist",
+    "mammoth",
   ],
 };
 
