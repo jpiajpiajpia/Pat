@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String         @id @default(cuid())
+  name           String
+  email          String         @unique
+  avatarInitials String?
+  createdAt      DateTime       @default(now())
+  conversations  Conversation[]
+  mcpServers     McpServer[]
+  settings       UserSettings?
+  memories       Memory[]
+  codeSessions   CodeSession[]
+}
+
+model UserSettings {
+  id                String  @id @default(cuid())
+  userId            String  @unique
+  defaultStrength   Int     @default(2)
+  theme             String  @default("system")
+  systemPrompt      String  @default("You are a helpful enterprise AI assistant.")
+  defaultChatModel  String  @default("mistral:7b")
+  defaultCodeModel  String  @default("qwen2.5-coder:7b")
+  enabledTools      String? // JSON array of tool ids; null = all enabled
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GeneratedFile {
+  id             String   @id @default(cuid())
+  conversationId String?
+  filename       String
+  mimeType       String
+  sizeBytes      Int
+  toolName       String   // which tool produced it
+  path           String   // absolute path on disk
+  createdAt      DateTime @default(now())
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  title     String    @default("New conversation")
+  userId    String
+  mode      String    @default("chat")
+  model     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+}
+
+model Message {
+  id               String       @id @default(cuid())
+  conversationId   String
+  role             String
+  content          String
+  toolCalls        String?
+  toolResults      String?
+  attachedFileIds  String?      // JSON array of Upload IDs attached to this message
+  createdAt        DateTime     @default(now())
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model CodeSession {
+  id        String     @id @default(cuid())
+  userId    String
+  title     String     @default("New task")
+  workspace String     @default("")
+  status    String     @default("idle") // idle | running | complete | error
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps     CodeStep[]
+}
+
+model CodeStep {
+  id        String      @id @default(cuid())
+  sessionId String
+  type      String      // thought | tool_call | tool_result | assistant | error
+  content   String
+  toolName  String?
+  createdAt DateTime    @default(now())
+  session   CodeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model Memory {
+  id        String   @id @default(cuid())
+  userId    String
+  content   String
+  source    String   @default("manual") // "manual" | "conversation"
+  embedding String   // JSON array of floats (768-dim)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model McpServer {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  authType  String   @default("none")
+  authValue String?
+  tools     String?
+  enabled   Boolean  @default(true)
+  userId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Upload {
+  id          String   @id @default(cuid())
+  filename    String
+  mimeType    String
+  sizeBytes   Int
+  path        String
+  textContent String?
+  createdAt   DateTime @default(now())
+}
