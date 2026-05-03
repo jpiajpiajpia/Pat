@@ -5,7 +5,7 @@ import { useChat } from "ai/react";
 import { MessageBubble } from "./MessageBubble";
 import { ChatInput } from "./ChatInput";
 import { useAppStore } from "@/store/app";
-import { Paperclip, X } from "lucide-react";
+import { Paperclip, X, Sparkles, Wrench } from "lucide-react";
 
 interface InitialMessage {
   id: string;
@@ -20,6 +20,8 @@ interface Props {
 }
 
 interface UploadedFile { id: string; name: string; mimeType: string; }
+interface ActiveSkill { id: string; name: string; description: string; }
+interface ActiveMcp { id: string; name: string; url: string; enabled: boolean; }
 
 const SUGGESTIONS = [
   { label: "Summarize a document", prompt: "Summarize this document for me: " },
@@ -36,6 +38,8 @@ export function ChatWindow({ conversationId, initialMessages = [] }: Props) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [activeSkills, setActiveSkills] = useState<ActiveSkill[]>([]);
+  const [activeMcps, setActiveMcps] = useState<ActiveMcp[]>([]);
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, stop } = useChat({
     api: "/api/chat",
@@ -45,8 +49,21 @@ export function ChatWindow({ conversationId, initialMessages = [] }: Props) {
       userId: user?.id,
       model: activeModel,
       fileIds: uploadedFiles.map((f) => f.id),
+      skillIds: activeSkills.map((s) => s.id),
+      mcpHints: activeMcps.map((m) => ({ id: m.id, name: m.name })),
     },
   });
+
+  function toggleSkill(s: ActiveSkill) {
+    setActiveSkills((prev) =>
+      prev.some((x) => x.id === s.id) ? prev.filter((x) => x.id !== s.id) : [...prev, s]
+    );
+  }
+  function toggleMcp(m: ActiveMcp) {
+    setActiveMcps((prev) =>
+      prev.some((x) => x.id === m.id) ? prev.filter((x) => x.id !== m.id) : [...prev, m]
+    );
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -224,9 +241,43 @@ export function ChatWindow({ conversationId, initialMessages = [] }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Attached files strip */}
-      {uploadedFiles.length > 0 && (
+      {/* Active context strip — files, skills, MCP hints */}
+      {(uploadedFiles.length > 0 || activeSkills.length > 0 || activeMcps.length > 0 || uploading) && (
         <div className="px-4 pb-1 flex flex-wrap gap-1.5">
+          {activeSkills.map((s) => (
+            <span
+              key={`sk-${s.id}`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border"
+              style={{ background: "var(--pat-cream-10)", borderColor: "rgba(200,169,110,0.3)", color: "var(--pat-cream)" }}
+              title={s.description}
+            >
+              <Sparkles className="h-3 w-3" />
+              {s.name}
+              <button
+                onClick={() => setActiveSkills((prev) => prev.filter((x) => x.id !== s.id))}
+                className="ml-0.5 opacity-60 hover:opacity-100"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          {activeMcps.map((m) => (
+            <span
+              key={`mcp-${m.id}`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border"
+              style={{ background: "rgba(34,197,94,0.10)", borderColor: "rgba(34,197,94,0.3)", color: "#86efac" }}
+              title={m.url}
+            >
+              <Wrench className="h-3 w-3" />
+              {m.name}
+              <button
+                onClick={() => setActiveMcps((prev) => prev.filter((x) => x.id !== m.id))}
+                className="ml-0.5 opacity-60 hover:opacity-100"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
           {uploadedFiles.map((f) => (
             <span
               key={f.id}
@@ -260,6 +311,10 @@ export function ChatWindow({ conversationId, initialMessages = [] }: Props) {
         onSubmit={handleFormSubmit}
         onStop={stop}
         onFileSelect={uploadFile}
+        activeSkillIds={new Set(activeSkills.map((s) => s.id))}
+        onToggleSkill={toggleSkill}
+        activeMcpIds={new Set(activeMcps.map((m) => m.id))}
+        onToggleMcp={toggleMcp}
       />
     </div>
   );

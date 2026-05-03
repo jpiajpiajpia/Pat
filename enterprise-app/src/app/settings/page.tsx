@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, User, Wrench, Brain, Cpu, Sliders, Database, Info, Server, Hammer } from "lucide-react";
+import { ArrowLeft, User, Wrench, Brain, Cpu, Sliders, Database, Info, Server, Hammer, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GeneralSettings } from "@/components/settings/GeneralSettings";
 import { McpServerList } from "@/components/settings/McpServerList";
@@ -12,8 +12,9 @@ import { ModelsPanel } from "@/components/settings/ModelsPanel";
 import { DataControlsPanel } from "@/components/settings/DataControlsPanel";
 import { AboutPanel } from "@/components/settings/AboutPanel";
 import { ToolsPanel } from "@/components/settings/ToolsPanel";
+import { SkillsPanel } from "@/components/settings/SkillsPanel";
 
-type Tab = "general" | "models" | "dependencies" | "tools" | "mcp" | "memory" | "data" | "about";
+type Tab = "general" | "models" | "dependencies" | "tools" | "skills" | "mcp" | "memory" | "data" | "about";
 
 interface TabDef {
   id: Tab;
@@ -24,14 +25,15 @@ interface TabDef {
 }
 
 const tabs: TabDef[] = [
-  { id: "general",      label: "General",      icon: User,    group: "core" },
-  { id: "models",       label: "Models",       icon: Sliders, group: "core" },
-  { id: "dependencies", label: "Dependencies", icon: Cpu,     group: "core" },
-  { id: "tools",        label: "Tools",        icon: Hammer,  group: "data" },
-  { id: "mcp",          label: "MCP Servers",  icon: Wrench,  group: "data" },
-  { id: "memory",       label: "Memory",       icon: Brain,   group: "data" },
+  { id: "general",      label: "General",      icon: User,     group: "core" },
+  { id: "models",       label: "Models",       icon: Sliders,  group: "core" },
+  { id: "dependencies", label: "Dependencies", icon: Cpu,      group: "core" },
+  { id: "tools",        label: "Tools",        icon: Hammer,   group: "data" },
+  { id: "skills",       label: "Skills",       icon: Sparkles, group: "data" },
+  { id: "mcp",          label: "MCP Servers",  icon: Wrench,   group: "data" },
+  { id: "memory",       label: "Memory",       icon: Brain,    group: "data" },
   { id: "data",         label: "Data Controls", icon: Database, group: "data" },
-  { id: "about",        label: "About",        icon: Info,    group: "system" },
+  { id: "about",        label: "About",        icon: Info,     group: "system" },
 ];
 
 const TAB_TITLES: Record<Tab, string> = {
@@ -39,6 +41,7 @@ const TAB_TITLES: Record<Tab, string> = {
   models: "Models",
   dependencies: "Dependencies",
   tools: "Tools",
+  skills: "Skills",
   mcp: "MCP Servers",
   memory: "Memory",
   data: "Data Controls",
@@ -50,8 +53,8 @@ const TAB_SUBTITLES: Record<Tab, string> = {
   models: "Pick the default model for Chat and Code. You can override per-message from the model selector.",
   dependencies: "Check that Ollama is running and install the models Nexus uses for chat, code, reasoning, vision, and memory.",
   tools: "Built-in capabilities the AI can call from both Chat and Code Agent — generating PDFs, Word docs, presentations, spreadsheets, fetching URLs, and more.",
+  skills: "Reusable prompt-additions you can call from the + menu. Each skill is a Markdown file you can edit directly. Use them to give Pat a persona, a workflow, formatting rules, or domain focus on demand.",
   mcp: "Connect external tools via the Model Context Protocol — Salesforce, Gong, Slack, custom services, or anything that speaks MCP.",
-
   memory: "Long-term, semantic memory powered by local embeddings. The AI uses these automatically when relevant.",
   data: "Export your data or wipe local conversations and code sessions.",
   about: "Build info, runtime status, and privacy details.",
@@ -131,6 +134,7 @@ export default function SettingsPage() {
           {tab === "models"       && <ModelsPanel />}
           {tab === "dependencies" && <DependenciesPanel />}
           {tab === "tools"        && <ToolsPanel />}
+          {tab === "skills"       && <SkillsPanel />}
           {tab === "mcp"          && <McpServerList />}
           {tab === "memory"       && <MemorySettings />}
           {tab === "data"         && <DataControlsPanel />}

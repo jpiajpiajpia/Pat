@@ -1,9 +1,14 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Send, Square, Paperclip } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Send, Square } from "lucide-react";
 import { useAppStore } from "@/store/app";
 import { ModelSelector } from "./ModelSelector";
+import { PlusMenu } from "./PlusMenu";
+
+interface SkillRef { id: string; name: string; description: string; }
+interface McpRef { id: string; name: string; url: string; enabled: boolean; }
 
 interface Props {
   input: string;
@@ -12,12 +17,22 @@ interface Props {
   onSubmit: (e: React.FormEvent) => void;
   onStop: () => void;
   onFileSelect?: (file: File) => void;
+  /** Active skill IDs and toggle handler — drives the + menu */
+  activeSkillIds?: Set<string>;
+  onToggleSkill?: (s: SkillRef) => void;
+  activeMcpIds?: Set<string>;
+  onToggleMcp?: (m: McpRef) => void;
 }
 
-export function ChatInput({ input, isLoading, onInputChange, onSubmit, onStop, onFileSelect }: Props) {
+export function ChatInput({
+  input, isLoading, onInputChange, onSubmit, onStop, onFileSelect,
+  activeSkillIds = new Set(), onToggleSkill = () => {},
+  activeMcpIds = new Set(), onToggleMcp = () => {},
+}: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, selectedChatModel, setSelectedChatModel } = useAppStore();
+  const router = useRouter();
 
   const activeModel = selectedChatModel ?? user?.settings?.defaultChatModel ?? "mistral:7b";
 
@@ -28,15 +43,8 @@ export function ChatInput({ input, isLoading, onInputChange, onSubmit, onStop, o
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [input]);
 
-  // Auto-focus on mount
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
-
-  // Re-focus when assistant finishes streaming
-  useEffect(() => {
-    if (!isLoading) textareaRef.current?.focus();
-  }, [isLoading]);
+  useEffect(() => { textareaRef.current?.focus(); }, []);
+  useEffect(() => { if (!isLoading) textareaRef.current?.focus(); }, [isLoading]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -54,34 +62,21 @@ export function ChatInput({ input, isLoading, onInputChange, onSubmit, onStop, o
 
   return (
     <div className="px-4 pb-4 pt-2">
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={handleFileChange}
-      />
+      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
       <div
         className="flex items-end gap-2 rounded-2xl px-3 py-3 transition-all border"
-        style={{
-          background: "var(--pat-surface)",
-          borderColor: "var(--pat-border)",
-        }}
-        onFocus={() => {}}
+        style={{ background: "var(--pat-surface)", borderColor: "var(--pat-border)" }}
       >
-        {/* Paperclip */}
         {onFileSelect && (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex-shrink-0 h-8 w-8 rounded-xl flex items-center justify-center transition-all mb-0.5"
-            style={{ color: "var(--pat-muted)" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--pat-text)"; (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--pat-muted)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-            title="Attach file"
-          >
-            <Paperclip className="h-4 w-4" />
-          </button>
+          <PlusMenu
+            onAddFiles={() => fileInputRef.current?.click()}
+            activeSkillIds={activeSkillIds}
+            onToggleSkill={onToggleSkill}
+            activeMcpIds={activeMcpIds}
+            onToggleMcp={onToggleMcp}
+            onManageSkills={() => router.push("/settings")}
+            onManageMcp={() => router.push("/settings")}
+          />
         )}
 
         <textarea

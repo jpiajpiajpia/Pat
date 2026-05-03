@@ -8,6 +8,7 @@ import { TOOL_CATALOG } from "@/lib/tools/registry";
 import { saveGeneratedFile } from "@/lib/tools/storage";
 import { buildToolPrompt } from "@/lib/prompts/toolPrompt";
 import { createAgentStreamResponse } from "@/lib/agentResponseStream";
+import { getSkillsByIds, renderSkillsBlock } from "@/lib/skills";
 import type { AgentTool } from "@/lib/agentLoop";
 import type { CoreMessage } from "ai";
 
@@ -17,7 +18,7 @@ const ollama = createOpenAI({
 });
 
 export async function POST(req: Request) {
-  const { messages, conversationId, userId, model, fileIds } = await req.json();
+  const { messages, conversationId, userId, model, fileIds, skillIds, mcpHints } = await req.json();
 
   // ---------- Resolve model + settings ----------
   const settings = await prisma.userSettings.findUnique({ where: { userId } });
@@ -179,13 +180,38 @@ export async function POST(req: Request) {
     };
   }
 
+  // ---------- Active skills (injected as a system-prompt section) ----------
+  let skillsSection = "";
+  if (Array.isArray(skillIds) && skillIds.length > 0) {
+    try {
+      const activeSkills = await getSkillsByIds(skillIds as string[]);
+      skillsSection = renderSkillsBlock(activeSkills);
+    } catch {
+      // skip skills on failure rather than break the chat
+    }
+  }
+
+  // ---------- MCP hints (the user clicked one or more MCP chips in the + menu) ----------
+  let mcpHintsSection = "";
+  if (Array.isArray(mcpHints) && mcpHints.length > 0) {
+    const names = (mcpHints as Array<{ name?: string }>)
+      .map((m) => m.name)
+      .filter(Boolean);
+    if (names.length > 0) {
+      mcpHintsSection =
+        "\n\n## Preferred tool servers\n\nThe user has indicated you should prefer using tools from these MCP server(s) when relevant: " +
+        names.map((n) => `**${n}**`).join(", ") +
+        ". Their tools are already loaded and named with the server prefix; reach for them when the task fits.";
+    }
+  }
+
   // Build tool instruction block (this is the key fix: explicit format teaching)
   const toolPromptBlock = buildToolPrompt(
     modelName,
     Object.values(tools).map((t) => ({ id: t.name, description: t.description })),
   );
 
-  const systemPrompt = `${basePrompt}${memorySection}${fileSection}${toolPromptBlock}`;
+  const systemPrompt = `${basePrompt}${memorySection}${fileSection}${skillsSection}${mcpHintsSection}${toolPromptBlock}`;
 
   // ---------- Run the agent loop and stream the response ----------
   return createAgentStreamResponse(

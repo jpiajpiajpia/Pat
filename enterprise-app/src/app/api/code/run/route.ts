@@ -5,6 +5,7 @@ import { TOOL_CATALOG } from "@/lib/tools/registry";
 import { callMcpTool } from "@/lib/mcp";
 import { buildToolPrompt } from "@/lib/prompts/toolPrompt";
 import { createAgentStreamResponse } from "@/lib/agentResponseStream";
+import { getSkillsByIds, renderSkillsBlock } from "@/lib/skills";
 import type { AgentTool } from "@/lib/agentLoop";
 import type { CoreMessage } from "ai";
 import fs from "fs/promises";
@@ -73,7 +74,7 @@ Be transparent. If a tool fails, explain why and try a different approach.
 `;
 
 export async function POST(req: Request) {
-  const { sessionId, task, workspace, model } = await req.json();
+  const { sessionId, task, workspace, model, skillIds, mcpHints } = await req.json();
 
   if (!sessionId || !task) {
     return new Response(JSON.stringify({ error: "sessionId and task required" }), { status: 400 });
@@ -407,13 +408,33 @@ export async function POST(req: Request) {
     }
   }
 
+  // ---------- Active skills (injected as a system-prompt section) ----------
+  let skillsSection = "";
+  if (Array.isArray(skillIds) && skillIds.length > 0) {
+    try {
+      const activeSkills = await getSkillsByIds(skillIds as string[]);
+      skillsSection = renderSkillsBlock(activeSkills);
+    } catch { /* skip */ }
+  }
+
+  // ---------- MCP hints ----------
+  let mcpHintsSection = "";
+  if (Array.isArray(mcpHints) && mcpHints.length > 0) {
+    const names = (mcpHints as Array<{ name?: string }>).map((m) => m.name).filter(Boolean);
+    if (names.length > 0) {
+      mcpHintsSection =
+        "\n\n## Preferred tool servers\n\nThe user has indicated you should prefer using tools from these MCP server(s) when relevant: " +
+        names.map((n) => `**${n}**`).join(", ") + ".";
+    }
+  }
+
   // ---------- Build system prompt with tool format teaching ----------
   const toolPromptBlock = buildToolPrompt(
     modelName,
     Object.values(tools).map((t) => ({ id: t.name, description: t.description })),
   );
 
-  const systemPrompt = `${CODE_SYSTEM}\n\nWorkspace: ${ws}${toolPromptBlock}`;
+  const systemPrompt = `${CODE_SYSTEM}\n\nWorkspace: ${ws}${skillsSection}${mcpHintsSection}${toolPromptBlock}`;
 
   // ---------- Run agent loop ----------
   return createAgentStreamResponse(

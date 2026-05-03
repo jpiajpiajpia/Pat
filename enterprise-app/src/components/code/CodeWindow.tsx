@@ -8,10 +8,12 @@ import { ModelSelector } from "@/components/chat/ModelSelector";
 import { useAppStore } from "@/store/app";
 import { usePreview } from "@/store/preview";
 import { lookup as mimeLookup } from "mime-types";
+import { useRouter } from "next/navigation";
 import {
   Code2, FolderOpen, Send, Square, X,
-  ChevronRight, Loader2,
+  ChevronRight, Loader2, Sparkles, Wrench,
 } from "lucide-react";
+import { PlusMenu } from "@/components/chat/PlusMenu";
 import { cn } from "@/lib/utils";
 import useSWR from "swr";
 
@@ -29,11 +31,21 @@ export function CodeWindow({ sessionId }: Props) {
   const activeModel =
     selectedCodeModel ?? user?.settings?.defaultCodeModel ?? "qwen2.5-coder:7b";
 
+  const router = useRouter();
   const [task, setTask] = useState("");
   const [workspaceDraft, setWorkspaceDraft] = useState("");
   const { openPreview } = usePreview();
   const [showWorkspacePicker, setShowWorkspacePicker] = useState(false);
   const [hasNativePicker, setHasNativePicker] = useState(false);
+  const [activeSkills, setActiveSkills] = useState<Array<{ id: string; name: string; description: string }>>([]);
+  const [activeMcps, setActiveMcps] = useState<Array<{ id: string; name: string; url: string; enabled: boolean }>>([]);
+
+  function toggleSkill(s: { id: string; name: string; description: string }) {
+    setActiveSkills((prev) => prev.some((x) => x.id === s.id) ? prev.filter((x) => x.id !== s.id) : [...prev, s]);
+  }
+  function toggleMcp(m: { id: string; name: string; url: string; enabled: boolean }) {
+    setActiveMcps((prev) => prev.some((x) => x.id === m.id) ? prev.filter((x) => x.id !== m.id) : [...prev, m]);
+  }
 
   // Detect Electron preload bridge once mounted (window not available during SSR)
   useEffect(() => {
@@ -78,7 +90,13 @@ export function CodeWindow({ sessionId }: Props) {
     });
     mutateSession();
 
-    append({ role: "user", content: t }, { body: { sessionId, workspace, model: activeModel, task: t } });
+    append({ role: "user", content: t }, {
+      body: {
+        sessionId, workspace, model: activeModel, task: t,
+        skillIds: activeSkills.map((s) => s.id),
+        mcpHints: activeMcps.map((m) => ({ id: m.id, name: m.name })),
+      },
+    });
   }
 
   async function setWorkspace(ws: string) {
@@ -223,9 +241,51 @@ export function CodeWindow({ sessionId }: Props) {
           />
         )}
 
+        {/* Active skills / MCP chips */}
+        {(activeSkills.length > 0 || activeMcps.length > 0) && (
+          <div className="px-4 pt-2 flex flex-wrap gap-1.5">
+            {activeSkills.map((s) => (
+              <span
+                key={`sk-${s.id}`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border"
+                style={{ background: "var(--pat-cream-10)", borderColor: "rgba(200,169,110,0.3)", color: "var(--pat-cream)" }}
+                title={s.description}
+              >
+                <Sparkles className="h-3 w-3" />
+                {s.name}
+                <button onClick={() => toggleSkill(s)} className="ml-0.5 opacity-60 hover:opacity-100">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {activeMcps.map((m) => (
+              <span
+                key={`mcp-${m.id}`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border"
+                style={{ background: "rgba(34,197,94,0.10)", borderColor: "rgba(34,197,94,0.3)", color: "#86efac" }}
+                title={m.url}
+              >
+                <Wrench className="h-3 w-3" />
+                {m.name}
+                <button onClick={() => toggleMcp(m)} className="ml-0.5 opacity-60 hover:opacity-100">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Task input */}
         <div className="px-4 pb-4 pt-2 border-t border-white/10">
           <div className="flex items-end gap-2 bg-zinc-800 border border-emerald-500/20 focus-within:border-emerald-500/50 rounded-2xl px-4 py-3 transition-all">
+            <PlusMenu
+              activeSkillIds={new Set(activeSkills.map((s) => s.id))}
+              onToggleSkill={toggleSkill}
+              activeMcpIds={new Set(activeMcps.map((m) => m.id))}
+              onToggleMcp={toggleMcp}
+              onManageSkills={() => router.push("/settings")}
+              onManageMcp={() => router.push("/settings")}
+            />
             <textarea
               value={task}
               onChange={(e) => setTask(e.target.value)}
